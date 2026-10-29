@@ -2,7 +2,7 @@
   "name": "hookguard",
   "version": "1.0.0",
   "private": true,
-  "description": "Reliable webhook relay with an outbox, RabbitMQ workers, Redis rate limiting, and a Jepsen-inspired correctness checker.",
+  "description": "Reliable webhook relay with transactional outbox, RabbitMQ workers, Redis rate limiting, and a Jepsen-inspired correctness checker.",
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
