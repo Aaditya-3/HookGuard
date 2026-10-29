@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>HookGuard</title>
+
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">WEBHOOK INFRASTRUCTURE</p>
+      <h1>HookGuard</h1>
+      <p class="subtitle">
+        Reliable webhook delivery and recovery
+      </p>
+    </div>
+
+    <div class="auth-panel">
+      <label for="admin-token">Admin API token</label>
+
+      <input
+        id="admin-token"
+        type="password"
+        autocomplete="off"
+        placeholder="Enter your local admin token"
+      >
+
+      <button id="save-token" type="button">
+        Set token
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CONFIGURATION</p>
+          <h2>Create integration</h2>
+        </div>
+      </div>
+
+      <form id="integration-form">
+        <label>
+          Integration name
+
+          <input
+            name="name"
+            type="text"
+            maxlength="100"
+            required
+            placeholder="Payment notifications"
+          >
+        </label>
+
+        <label>
+          Source service
+
+          <input
+            name="sourceService"
+            type="text"
+            maxlength="100"
+            required
+            placeholder="Payment Service"
+          >
+        </label>
+
+        <label>
+          Event types
+
+          <input
+            name="eventTypes"
+            type="text"
+            required
+            placeholder="payment.succeeded, payment.failed"
+          >
+
+          <small>
+            Separate event types with commas.
+          </small>
+        </label>
+
+        <label>
+          Destination URL
+
+          <input
+            name="destinationUrl"
+            type="url"
+            required
+            placeholder="https://example.com/webhooks"
+          >
+        </label>
+
+        <button type="submit">
+          Create integration
+        </button>
+      </form>
+
+      <div
+        id="create-result"
+        class="result hidden"
+        aria-live="polite"
+      ></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CONFIGURATION</p>
+          <h2>Integrations</h2>
+        </div>
+
+        <button id="refresh-integrations" type="button">
+          Refresh
+        </button>
+      </div>
+
+      <div id="integrations-list" class="card-list">
+        <p class="muted">No integrations loaded.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">DELIVERY PIPELINE</p>
+          <h2>Recent deliveries</h2>
+        </div>
+
+        <button id="refresh-deliveries" type="button">
+          Refresh
+        </button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Delivery ID</th>
+              <th>Event type</th>
+              <th>Status</th>
+              <th>Attempts</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+
+          <tbody id="deliveries-body">
+            <tr>
+              <td colspan="6" class="muted">
+                No deliveries loaded.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p id="notice" class="notice" aria-live="polite"></p>
+  </main>
+</body>
+</html>
