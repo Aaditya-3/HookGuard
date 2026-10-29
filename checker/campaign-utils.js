@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Pool } from 'pg';
 
 export function createCheckerPool() {
@@ -21,7 +22,6 @@ export async function createCheckerIntegration({
   baseUrl,
   adminToken,
   destinationUrl,
-  rateLimitPerMinute = 100000,
 }) {
   const response = await fetch(`${baseUrl}/api/integrations`, {
     method: 'POST',
@@ -30,29 +30,47 @@ export async function createCheckerIntegration({
       'x-admin-token': adminToken,
     },
     body: JSON.stringify({
-  name: `Correctness campaign ${new Date().toISOString()}`,
-  sourceService: 'hookguard-checker',
-  eventTypes: ['checker.event'],
-  destinationUrl,
-}),
+      name: `Correctness campaign ${new Date().toISOString()}`,
+      sourceService: 'hookguard-checker',
+      eventTypes: ['checker.event'],
+      destinationUrl,
+    }),
   });
 
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    const message =
+      body?.error?.message ??
+      body?.message ??
+      `HTTP ${response.status}`;
+
     throw new Error(
-      `Integration creation failed (${response.status}): ` +
-      JSON.stringify(body),
+      `Integration creation failed (${response.status}): ${message}`,
     );
   }
 
-  if (!body.integration?.id || !body.integration?.ingressUrl) {
+  // The API returns ingressUrl at the top level, not inside integration.
+  const ingressUrl =
+    body.ingressUrl ?? body.integration?.ingressUrl;
+
+  if (!body.integration?.id || !ingressUrl) {
     throw new Error(
-      `Integration response is missing required fields: ${JSON.stringify(body)}`,
+      'Invalid integration response. ' +
+      `Has integration ID: ${Boolean(body.integration?.id)}, ` +
+      `has ingress URL: ${Boolean(ingressUrl)}, ` +
+      `response keys: ${Object.keys(body).join(', ')}`,
     );
   }
 
-  return body;
+  // Normalize the response so callers can access integration.ingressUrl.
+  return {
+    ...body,
+    integration: {
+      ...body.integration,
+      ingressUrl,
+    },
+  };
 }
 
 export async function sendOperation({
@@ -71,10 +89,6 @@ export async function sendOperation({
       headers: {
         'content-type': 'application/json',
         'x-event-type': eventType,
-
-        // Send the logical ID in multiple conventional locations
-        // so the ingress implementation can apply its configured
-        // source-event deduplication behavior.
         'x-event-id': key,
         'x-source-event-id': key,
         'idempotency-key': key,
@@ -113,7 +127,7 @@ export async function sendOperation({
 
 export async function runConcurrent(items, concurrency, task) {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
-    throw new Error('Concurrency must be a positive integer');
+    throw new Error('Concurrency must be a positive integer.');
   }
 
   const results = new Array(items.length);
@@ -134,14 +148,20 @@ export async function runConcurrent(items, concurrency, task) {
   const runnerCount = Math.min(concurrency, items.length);
 
   await Promise.all(
-    Array.from({ length: runnerCount }, () => runner()),
+    Array.from(
+      { length: runnerCount },
+      () => runner(),
+    ),
   );
 
   return results;
 }
 
 export async function getAudit(pool, integrationId, limit = 25000) {
-  const safeLimit = Math.max(1, Math.min(Number(limit) || 25000, 25000));
+  const safeLimit = Math.max(
+    1,
+    Math.min(Number(limit) || 25000, 25000),
+  );
 
   const [events, deliveries, attempts] = await Promise.all([
     pool.query(
@@ -178,9 +198,7 @@ export async function getAudit(pool, integrationId, limit = 25000) {
     events: events.rows,
     deliveries: deliveries.rows,
     attempts: attempts.rows,
-
-    // This implementation does not query transition history because
-    // the current schema does not yet store it.
+    // The current schema does not persist transition history yet.
     transitions: [],
   };
 }
