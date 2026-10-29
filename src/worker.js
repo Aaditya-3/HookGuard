@@ -204,3 +204,188 @@ async function handleMessage(channel, message) {
   }
 }
 
+async function runConsumerLoop() {
+  while (!stopping) {
+    let connection = null;
+    let channel = null;
+
+    try {
+      logger.info(
+        'Connecting worker to RabbitMQ'
+      );
+
+      connection = await amqp.connect(
+        config.rabbitmqUrl
+      );
+
+      consumerConnection = connection;
+
+      connection.on('error', (error) => {
+        logger.error(
+          { err: error },
+          'RabbitMQ worker connection error'
+        );
+      });
+
+      channel = await connection.createChannel();
+
+      consumerChannel = channel;
+
+      channel.on('error', (error) => {
+        logger.error(
+          { err: error },
+          'RabbitMQ worker channel error'
+        );
+      });
+
+      await channel.assertExchange(
+        DEAD_LETTER_EXCHANGE,
+        'direct',
+        {
+          durable: true
+        }
+      );
+
+      await channel.assertQueue(
+        DEAD_LETTER_QUEUE,
+        {
+          durable: true
+        }
+      );
+
+      await channel.bindQueue(
+        DEAD_LETTER_QUEUE,
+        DEAD_LETTER_EXCHANGE,
+        DEAD_LETTER_ROUTING_KEY
+      );
+
+      await channel.assertQueue(
+        DELIVERY_QUEUE,
+        {
+          durable: true,
+          arguments: {
+            'x-dead-letter-exchange':
+              DEAD_LETTER_EXCHANGE,
+
+            'x-dead-letter-routing-key':
+              DEAD_LETTER_ROUTING_KEY
+          }
+        }
+      );
+
+      // Bound the number of unacknowledged messages assigned
+      // to this consumer.
+      await channel.prefetch(
+        config.workerConcurrency
+      );
+
+      await channel.consume(
+        DELIVERY_QUEUE,
+        (message) => {
+          void handleMessage(
+            channel,
+            message
+          );
+        },
+        {
+          noAck: false
+        }
+      );
+
+      logger.info(
+        {
+          concurrency: config.workerConcurrency
+        },
+        'RabbitMQ worker consuming delivery jobs'
+      );
+
+      // Wait until RabbitMQ closes the connection.
+      await new Promise((resolve) => {
+        connection.once('close', resolve);
+      });
+    } catch (error) {
+      if (!stopping) {
+        logger.error(
+          { err: error },
+          'RabbitMQ consumer failed'
+        );
+      }
+    } finally {
+      if (consumerChannel === channel) {
+        consumerChannel = null;
+      }
+
+      if (consumerConnection === connection) {
+        consumerConnection = null;
+      }
+
+      await channel?.close().catch(() => {});
+      await connection?.close().catch(() => {});
+    }
+
+    if (!stopping) {
+      logger.warn(
+        'Retrying RabbitMQ connection in 2 seconds'
+      );
+
+      await sleep(2000);
+    }
+  }
+}
+
+const metricsServer = startMetricsServer();
+
+const schedulerInterval = setInterval(() => {
+  void runSchedulerOnce();
+}, config.schedulerPollMs);
+
+schedulerInterval.unref();
+
+outboxPublisher.start();
+
+void runSchedulerOnce();
+
+const consumerLoop = runConsumerLoop();
+
+async function shutdown(signal) {
+  if (stopping) {
+    return;
+  }
+
+  stopping = true;
+
+  logger.info(
+    { signal },
+    'Shutting down worker'
+  );
+
+  clearInterval(schedulerInterval);
+
+  await outboxPublisher.stop().catch((error) => {
+    logger.error(
+      { err: error },
+      'Error stopping outbox publisher'
+    );
+  });
+
+  await consumerChannel?.close().catch(() => {});
+  await consumerConnection?.close().catch(() => {});
+
+  await consumerLoop.catch(() => {});
+
+  await new Promise((resolve) => {
+    metricsServer.close(resolve);
+  });
+
+  await pool.end();
+
+  logger.info('Worker shutdown complete');
+}
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
