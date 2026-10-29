@@ -30,12 +30,11 @@ export async function createCheckerIntegration({
       'x-admin-token': adminToken,
     },
     body: JSON.stringify({
-      name: `Correctness campaign ${new Date().toISOString()}`,
-      sourceService: 'hookguard-checker',
-      eventTypes: ['checker.event'],
-      destinationUrl,
-      rateLimitPerMinute,
-    }),
+  name: `Correctness campaign ${new Date().toISOString()}`,
+  sourceService: 'hookguard-checker',
+  eventTypes: ['checker.event'],
+  destinationUrl,
+}),
   });
 
   const body = await response.json().catch(() => ({}));
