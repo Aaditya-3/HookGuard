@@ -3,6 +3,7 @@ import {
   describe,
   expect,
   it,
+  beforeEach,
   vi
 } from 'vitest';
 
