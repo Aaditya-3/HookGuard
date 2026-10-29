@@ -1,31 +1,42 @@
 {
   "name": "hookguard",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/server.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Aaditya-3/HookGuard.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "private": true,
+  "description": "Reliable webhook relay with an outbox, RabbitMQ workers, Redis rate limiting, and a Jepsen-inspired correctness checker.",
   "type": "module",
-  "bugs": {
-    "url": "https://github.com/Aaditya-3/HookGuard/issues"
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "worker": "node src/worker.js",
+    "worker:dev": "nodemon src/worker.js",
+    "sink": "node src/sink-server.js",
+    "db:migrate": "node scripts/migrate.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "checker": "node checker/run-campaign.js",
+    "checker:crashes": "node checker/worker-crash-campaign.js",
+    "checker:toxiproxy": "node checker/toxiproxy-campaign.js",
+    "toxiproxy:setup": "node scripts/setup-toxiproxy.js",
+    "load": "k6 run tests/load/webhook-ingestion.js"
   },
-  "homepage": "https://github.com/Aaditya-3/HookGuard#readme",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
-    "express": "^5.3.0"
+    "amqplib": "^0.10.8",
+    "dotenv": "^16.6.1",
+    "express": "^5.3.0",
+    "ipaddr.js": "^2.2.0",
+    "ioredis": "^5.6.1",
+    "pg": "^8.16.3",
+    "pino": "^9.9.0",
+    "prom-client": "^15.1.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "fast-check": "^4.3.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.1.4",
+    "vitest": "^3.2.4"
   }
 }

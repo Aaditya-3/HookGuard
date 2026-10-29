@@ -1,0 +1,215 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hookguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-hookguard}
+
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hookguard}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  webhook-sink:
+    build: .
+    command: ["node", "src/sink-server.js"]
+
+    environment:
+      SINK_PORT: 4001
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    ports:
+      - "127.0.0.1:4001:4001"
+
+    restart: unless-stopped
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    restart: unless-stopped
+
+    command: ["-host=0.0.0.0"]
+
+    ports:
+      - "127.0.0.1:8474:8474"
+      - "127.0.0.1:8666:8666"
+
+  api:
+    build: .
+    command: ["node", "src/server.js"]
+    restart: unless-stopped
+
+    environment: &app-env
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hookguard}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-hookguard}
+
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-hookguard}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@rabbitmq:5672
+
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
+
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY in .env}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?Set ADMIN_API_TOKEN in .env}
+
+      INGRESS_BASE_URL: ${INGRESS_BASE_URL:-http://localhost:3000}
+      ALLOW_PRIVATE_DESTINATIONS: ${ALLOW_PRIVATE_DESTINATIONS:-true}
+      INGRESS_RATE_LIMIT_PER_MINUTE: ${INGRESS_RATE_LIMIT_PER_MINUTE:-20000}
+
+      DESTINATION_TIMEOUT_MS: ${DESTINATION_TIMEOUT_MS:-10000}
+      MAX_DELIVERY_ATTEMPTS: ${MAX_DELIVERY_ATTEMPTS:-8}
+      RETRY_BASE_MS: ${RETRY_BASE_MS:-1000}
+      RETRY_MAX_MS: ${RETRY_MAX_MS:-60000}
+
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-20}
+      WORKER_LEASE_MS: ${WORKER_LEASE_MS:-60000}
+
+      OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-300}
+      SCHEDULER_POLL_MS: ${SCHEDULER_POLL_MS:-1000}
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build: .
+    command: ["node", "src/worker.js"]
+    restart: unless-stopped
+
+    environment:
+      <<: *app-env
+      WORKER_METRICS_PORT: 9101
+
+    ports:
+      - "127.0.0.1:9101:9101"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build: .
+    command: ["node", "scripts/migrate.js"]
+    restart: "no"
+
+    environment: *app-env
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:9090:9090"
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+    depends_on:
+      - api
+      - worker
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:3001:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-local-grafana-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  redis_data:
+  grafana_data:
