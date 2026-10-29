@@ -1,16 +1,20 @@
 # Installed dependencies
 node_modules/
 
-# Environment variables and local secrets
+# Local environment and secrets
 .env
 .env.*
 !.env.example
 
-# Test coverage reports
+# Test output
 coverage/
-
-# Log files
 *.log
 
-# Operating system files
+# OS/editor files
 .DS_Store
+.vscode/
+
+# Runtime output
+.tmp/
+reports/*.json
+!reports/.gitkeep
