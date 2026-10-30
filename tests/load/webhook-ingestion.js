@@ -11,6 +11,7 @@ const acceptanceRate = new Rate(
 );
 
 const ingressUrl = __ENV.HOOKGUARD_INGRESS_URL;
+const runId = __ENV.RUN_ID || 'local';
 
 if (!ingressUrl) {
   throw new Error(
@@ -60,7 +61,7 @@ export default function () {
   // __VU identifies the virtual user.
   // __ITER identifies that user's current iteration.
   // Their combination produces a unique logical event ID.
-  const sourceEventId = `k6-${__VU}-${__ITER}`;
+ const sourceEventId = `k6-${runId}-${__VU}-${__ITER}`;
 
   const payload = {
     id: sourceEventId,
