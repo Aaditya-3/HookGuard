@@ -163,43 +163,61 @@ export async function getAudit(pool, integrationId, limit = 25000) {
     Math.min(Number(limit) || 25000, 25000),
   );
 
-  const [events, deliveries, attempts] = await Promise.all([
-    pool.query(
-      `SELECT id, integration_id, source_event_id, event_type, received_at
-       FROM events
-       WHERE integration_id = $1
-       ORDER BY received_at ASC
-       LIMIT $2`,
-      [integrationId, safeLimit],
-    ),
+  const [events, deliveries, attempts, transitions] =
+    await Promise.all([
+      pool.query(
+        `SELECT id, integration_id, source_event_id,
+                event_type, received_at
+         FROM events
+         WHERE integration_id = $1
+         ORDER BY received_at ASC
+         LIMIT $2`,
+        [integrationId, safeLimit],
+      ),
 
-    pool.query(
-      `SELECT id, event_id, integration_id, status, attempt_count,
-              created_at, updated_at
-       FROM deliveries
-       WHERE integration_id = $1
-       ORDER BY created_at ASC
-       LIMIT $2`,
-      [integrationId, safeLimit],
-    ),
+      pool.query(
+        `SELECT id, event_id, integration_id, status,
+                attempt_count, created_at, updated_at
+         FROM deliveries
+         WHERE integration_id = $1
+         ORDER BY created_at ASC
+         LIMIT $2`,
+        [integrationId, safeLimit],
+      ),
 
-    pool.query(
-      `SELECT a.*
-       FROM delivery_attempts a
-       JOIN deliveries d ON d.id = a.delivery_id
-       WHERE d.integration_id = $1
-       ORDER BY a.delivery_id, a.started_at ASC
-       LIMIT $2`,
-      [integrationId, safeLimit],
-    ),
-  ]);
+      pool.query(
+        `SELECT a.*
+         FROM delivery_attempts a
+         JOIN deliveries d ON d.id = a.delivery_id
+         WHERE d.integration_id = $1
+         ORDER BY a.delivery_id, a.started_at ASC
+         LIMIT $2`,
+        [integrationId, safeLimit],
+      ),
+
+      pool.query(
+        `SELECT
+             t.id,
+             t.delivery_id,
+             t.from_status,
+             t.to_status,
+             t.reason,
+             t.actor,
+             t.created_at
+         FROM delivery_state_transitions t
+         JOIN deliveries d ON d.id = t.delivery_id
+         WHERE d.integration_id = $1
+         ORDER BY t.id ASC
+         LIMIT $2`,
+        [integrationId, safeLimit],
+      ),
+    ]);
 
   return {
     events: events.rows,
     deliveries: deliveries.rows,
     attempts: attempts.rows,
-    // The current schema does not persist transition history yet.
-    transitions: [],
+    transitions: transitions.rows,
   };
 }
 
