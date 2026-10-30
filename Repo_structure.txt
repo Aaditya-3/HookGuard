@@ -1,0 +1,51 @@
+HookGuard/
+│
+├── checker/
+│   ├── campaign-utils.js
+│   ├── history-checker.js
+│   ├── run-campaign.js
+│   ├── worker-crash-campaign.js
+│   └── toxiproxy-campaign.js
+│
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/
+│
+├── public/
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
+│
+├── scripts/
+│   ├── migrate.js
+│   └── setup-toxiproxy.js
+│
+├── src/
+│   ├── db/
+│   │   ├── migrations/
+│   │   └── pool.js
+│   │
+│   ├── lib/
+│   ├── middleware/
+│   ├── routes/
+│   ├── services/
+│   │
+│   ├── app.js
+│   ├── config.js
+│   ├── logger.js
+│   ├── metrics.js
+│   ├── server.js
+│   ├── sink-server.js
+│   └── worker.js
+│
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── load/
+│
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
+└── package.json
