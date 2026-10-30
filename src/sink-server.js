@@ -15,6 +15,7 @@ let latencyMs = 0;
 let failuresRemaining = 0;
 
 const receivedEvents = [];
+let totalReceived = 0;
 
 app.get('/health/live', (req, res) => {
   res.status(200).json({
@@ -27,7 +28,8 @@ app.get('/stats', (req, res) => {
     mode,
     latencyMs,
     failuresRemaining,
-    receivedCount: receivedEvents.length,
+    receivedCount: totalReceived,
+    eventsRetained: receivedEvents.length,
     events: receivedEvents.slice(-100)
   });
 });
@@ -102,6 +104,7 @@ app.post('/__reset', (req, res) => {
   failuresRemaining = 0;
 
   receivedEvents.length = 0;
+  totalReceived = 0;
 
   res.status(200).json({
     status: 'reset'
@@ -118,6 +121,7 @@ app.post('/webhook', async (req, res) => {
   };
 
   receivedEvents.push(event);
+  totalReceived++;
 
   if (receivedEvents.length > 10000) {
     receivedEvents.shift();
